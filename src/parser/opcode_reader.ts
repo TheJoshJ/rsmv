@@ -1626,6 +1626,23 @@ const numberTypes: Record<string, { read: (s: DecodeState) => number, write: (s:
 		write(s, v) { s.buffer.writeUint16LE(v, s.scan); s.scan += 2; },
 		min: 0, max: 2 ** 16 - 1
 	},
+	// OB3 stores triangle-index buffer lengths modulo 65536, even for large meshes. A triangle list has a multiple
+	// of three indices; because 65536 % 3 == 1, that recovers up to two wraps uniquely. The buffer parser still checks
+	// the recovered byte length against the file bounds. Build 951 model 129744 has an 82620-index material render.
+	triangle_index_count_le: {
+		read(s) {
+			let count = s.buffer.readUInt16LE(s.scan); s.scan += 2;
+			while (count % 3 !== 0) { count += 65536; }
+			return count;
+		},
+		write(s, count) {
+			if (!Number.isInteger(count) || count < 0 || count > 196605 || count % 3 !== 0) {
+				throw new Error("triangle index count must be a multiple of three below 196608");
+			}
+			s.buffer.writeUInt16LE(count & 65535, s.scan); s.scan += 2;
+		},
+		min: 0, max: 196605
+	},
 	utribyte: {
 		read(s) { let r = s.buffer.readUIntBE(s.scan, 3); s.scan += 3; return r; },
 		write(s, v) { s.buffer.writeUintBE(v, s.scan, 3); s.scan += 3; },
